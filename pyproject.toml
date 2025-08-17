@@ -3,7 +3,7 @@ name = "langgraph-responses-gateway"
 version = "0.1.0"
 description = "Expose any LangGraph agent as an OpenAI Responses API endpoint"
 readme = "README.md"
-license = {text = "MIT"}
+license = "MIT"
 authors = [
     {name = "Jerome Mohanan"},
 ]
