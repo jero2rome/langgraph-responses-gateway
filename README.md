@@ -21,8 +21,8 @@ The AI ecosystem has a gap: while LangGraph provides powerful agent orchestratio
 - **Full Streaming Support**: Native SSE streaming with correct OpenAI event names
 - **Conversation Chaining**: Support for `previous_response_id` to maintain context
 - **OpenAI Spec Compliant**: Uses `input` parameter and exact event structure
+- **Automatic Translation**: Converts OpenAI `input` to LangGraph `messages` format
 - **Vercel AI SDK Compatible**: Seamless integration with modern web frameworks
-- **Backward Compatible**: Still accepts `messages` for easy migration
 - **Production Ready**: Built on FastAPI with robust error handling
 
 ## Installation
@@ -177,29 +177,37 @@ The gateway exposes the following endpoints:
 ### POST `/v1/responses`
 Create a response from the agent. Supports both streaming and non-streaming modes.
 
-**Request Body:**
+**Request Body (OpenAI SDK Compatible):**
 ```json
 {
   "model": "langgraph-agent",              // Required
-  "input": "Your message",                // Or array of input parts
+  "input": "Your message",                // Required - string or array of input parts
   "stream": true,                         // Enable SSE streaming
+  "instructions": "Be helpful",           // System instructions
   "previous_response_id": "resp_xxx",     // Chain conversations
   "store": true,                          // Store for chaining
-  "thread_id": "optional-thread-id",      // Thread management
-  "user_id": "optional-user-id",          // User isolation
-  "metadata": {}                          // Custom data
+  "temperature": 0.7,                     // Generation temperature
+  "top_p": 0.9,                           // Nucleus sampling
+  "max_output_tokens": 1000,              // Max tokens to generate
+  "truncation": "auto",                   // Truncation strategy ("auto" or "disabled")
+  "service_tier": "default",              // Processing tier
+  "user": "user-123",                     // End-user identifier
+  "include": ["message.output_text.logprobs"], // Additional output data
+  "thread_id": "optional-thread-id",      // LangGraph thread management
+  "user_id": "optional-user-id",          // User isolation (alias for 'user')
+  "metadata": {}                          // Custom metadata
 }
 ```
 
-**Backward Compatibility:**
-The gateway still accepts `messages` array for easy migration:
-```json
-{
-  "model": "langgraph-agent",
-  "messages": [{"role": "user", "content": "Your message"}],
-  "stream": false
-}
-```
+**Translation Notes:**
+
+1. **Message Format**: The gateway automatically translates OpenAI's `input` parameter to LangGraph's internal `messages` format.
+
+2. **Conversation Management**: Two different mechanisms are supported:
+   - **`previous_response_id`**: OpenAI's stateless conversation continuation by referencing a specific response
+   - **`thread_id` + `user`**: LangGraph's stateful conversation management via checkpointer (composite key = `{user}:{thread_id}`)
+   
+   These are complementary - use `previous_response_id` for OpenAI-style continuation, or `thread_id`/`user` for LangGraph's persistent state management.
 
 ### GET `/v1/models`
 List available models (returns your configured model name).
