@@ -23,7 +23,9 @@ jobs:
         pip install build twine
     
     - name: Build package
-      run: python -m build
+      run: |
+        ls -la
+        python -m build
     
     - name: Check distribution
       run: twine check dist/*
