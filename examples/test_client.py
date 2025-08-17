@@ -1,9 +1,10 @@
 """Test client for interacting with the ResponsesGateway server.
 
 This example shows different ways to interact with the gateway:
-1. Non-streaming requests
+1. Non-streaming requests using 'input' parameter
 2. Streaming with SSE
-3. Using the OpenAI Python client
+3. Conversation chaining with previous_response_id
+4. Backward compatibility with 'messages' parameter
 
 Author: Jerome Mohanan
 """
@@ -15,18 +16,17 @@ import httpx
 
 
 async def test_non_streaming():
-    """Test non-streaming request."""
+    """Test non-streaming request with 'input' parameter (OpenAI spec)."""
     print("=" * 50)
-    print("Testing Non-Streaming Request")
+    print("Testing Non-Streaming Request with 'input'")
     print("=" * 50)
 
     async with httpx.AsyncClient() as client:
         response = await client.post(
             "http://localhost:8003/v1/responses",
             json={
-                "messages": [
-                    {"role": "user", "content": "What is the capital of France?"}
-                ],
+                "model": "langgraph-agent",  # Required per spec
+                "input": "What is the capital of France?",
                 "stream": False,
             },
         )
@@ -40,6 +40,10 @@ async def test_non_streaming():
             if data.get("output"):
                 content = data["output"][0]["content"][0]["text"]
                 print(f"Response: {content}")
+                
+            # Show usage
+            usage = data.get("usage", {})
+            print(f"Tokens - Prompt: {usage.get('prompt_tokens')}, Completion: {usage.get('completion_tokens')}")
         else:
             print(f"Error: {response.status_code} - {response.text}")
 
@@ -47,9 +51,9 @@ async def test_non_streaming():
 
 
 async def test_streaming():
-    """Test streaming request with SSE."""
+    """Test streaming request with SSE using 'input' parameter."""
     print("=" * 50)
-    print("Testing Streaming Request")
+    print("Testing Streaming Request with 'input'")
     print("=" * 50)
 
     async with httpx.AsyncClient() as client:
@@ -57,9 +61,8 @@ async def test_streaming():
             "POST",
             "http://localhost:8003/v1/responses",
             json={
-                "messages": [
-                    {"role": "user", "content": "Tell me a short story about a robot"}
-                ],
+                "model": "langgraph-agent",
+                "input": "Tell me a short story about a robot",
                 "stream": True,
             },
         ) as response:
@@ -75,7 +78,7 @@ async def test_streaming():
                             print(f"Response ID: {event['response']['id']}")
                             print("Content: ", end="", flush=True)
 
-                        elif event["type"] == "response.text.delta":
+                        elif event["type"] == "response.output_text.delta":
                             delta = event.get("delta", "")
                             print(delta, end="", flush=True)
                             accumulated_text += delta
@@ -85,7 +88,9 @@ async def test_streaming():
                             print(f"Status: {event['response']['status']}")
                             usage = event["response"].get("usage", {})
                             print(
-                                f"Tokens - Input: {usage.get('input_tokens')}, Output: {usage.get('output_tokens')}"
+                                f"Tokens - Prompt: {usage.get('prompt_tokens')}, "
+                                f"Completion: {usage.get('completion_tokens')}, "
+                                f"Total: {usage.get('total_tokens')}"
                             )
 
                     except json.JSONDecodeError:
@@ -94,13 +99,11 @@ async def test_streaming():
     print()
 
 
-async def test_with_thread_id():
-    """Test conversation threading."""
+async def test_conversation_chaining():
+    """Test conversation chaining with previous_response_id."""
     print("=" * 50)
-    print("Testing Conversation Threading")
+    print("Testing Conversation Chaining")
     print("=" * 50)
-
-    thread_id = "test-thread-123"
 
     async with httpx.AsyncClient() as client:
         # First message
@@ -108,55 +111,138 @@ async def test_with_thread_id():
         response1 = await client.post(
             "http://localhost:8003/v1/responses",
             json={
-                "messages": [{"role": "user", "content": "My name is Alice"}],
-                "thread_id": thread_id,
+                "model": "langgraph-agent",
+                "input": "My name is Alice and I love robotics",
                 "stream": False,
+                "store": True,  # Store for chaining
             },
         )
+        
         if response1.status_code == 200:
-            content = response1.json()["output"][0]["content"][0]["text"]
+            data1 = response1.json()
+            response_id1 = data1["id"]
+            content = data1["output"][0]["content"][0]["text"]
             print(f"Response: {content}")
+            print(f"Response ID: {response_id1}")
 
-        # Second message in same thread
-        print("\nMessage 2 (same thread):")
-        response2 = await client.post(
-            "http://localhost:8003/v1/responses",
-            json={
-                "messages": [{"role": "user", "content": "What's my name?"}],
-                "thread_id": thread_id,
-                "stream": False,
-            },
-        )
-        if response2.status_code == 200:
-            content = response2.json()["output"][0]["content"][0]["text"]
-            print(f"Response: {content}")
+            # Second message chained to first
+            print("\nMessage 2 (chained):")
+            response2 = await client.post(
+                "http://localhost:8003/v1/responses",
+                json={
+                    "model": "langgraph-agent",
+                    "input": "What's my name and what do I love?",
+                    "previous_response_id": response_id1,  # Chain to previous
+                    "stream": False,
+                },
+            )
+            
+            if response2.status_code == 200:
+                data2 = response2.json()
+                content = data2["output"][0]["content"][0]["text"]
+                print(f"Response: {content}")
+            else:
+                print(f"Error: {response2.status_code} - {response2.text}")
+        else:
+            print(f"Error: {response1.status_code} - {response1.text}")
 
     print()
 
 
-async def test_with_openai_client():
-    """Test using the OpenAI Python client (if available)."""
+async def test_multipart_input():
+    """Test with array of input parts."""
     print("=" * 50)
-    print("Testing with OpenAI Client")
+    print("Testing Multi-part Input")
     print("=" * 50)
 
-    try:
-        from openai import OpenAI
-
-        # Configure client to use our gateway
-        client = OpenAI(
-            base_url="http://localhost:8003/v1",
-            api_key="not-needed",  # Gateway doesn't require auth
+    async with httpx.AsyncClient() as client:
+        response = await client.post(
+            "http://localhost:8003/v1/responses",
+            json={
+                "model": "langgraph-agent",
+                "input": [
+                    {"type": "input_text", "text": "Calculate the sum of "},
+                    {"type": "input_text", "text": "15 and 27"},
+                ],
+                "stream": False,
+            },
         )
 
-        # Note: OpenAI client expects /chat/completions endpoint
-        # This would need the gateway to also expose that endpoint
-        print("Note: OpenAI client requires /chat/completions endpoint")
-        print("The gateway currently only exposes /responses endpoint")
-        print("Use httpx for direct Responses API access")
+        if response.status_code == 200:
+            data = response.json()
+            content = data["output"][0]["content"][0]["text"]
+            print(f"Response: {content}")
+        else:
+            print(f"Error: {response.status_code} - {response.text}")
 
-    except ImportError:
-        print("OpenAI client not installed. Install with: pip install openai")
+    print()
+
+
+async def test_backward_compatibility():
+    """Test backward compatibility with 'messages' parameter."""
+    print("=" * 50)
+    print("Testing Backward Compatibility with 'messages'")
+    print("=" * 50)
+
+    async with httpx.AsyncClient() as client:
+        response = await client.post(
+            "http://localhost:8003/v1/responses",
+            json={
+                "model": "langgraph-agent",
+                "messages": [
+                    {"role": "user", "content": "What's 2+2?"}
+                ],
+                "stream": False,
+            },
+        )
+
+        if response.status_code == 200:
+            data = response.json()
+            content = data["output"][0]["content"][0]["text"]
+            print(f"Response: {content}")
+            print(" Backward compatibility working")
+        else:
+            print(f"Error: {response.status_code} - {response.text}")
+
+    print()
+
+
+async def test_error_handling():
+    """Test error handling with missing required fields."""
+    print("=" * 50)
+    print("Testing Error Handling")
+    print("=" * 50)
+
+    async with httpx.AsyncClient() as client:
+        # Test missing model
+        print("1. Missing 'model' parameter:")
+        response = await client.post(
+            "http://localhost:8003/v1/responses",
+            json={
+                "input": "Hello",
+                "stream": False,
+            },
+        )
+        
+        if response.status_code == 400:
+            print(f" Correctly rejected: {response.json()}")
+        else:
+            print(f" Should have failed: {response.status_code}")
+
+        # Test missing input
+        print("\n2. Missing 'input' and 'messages':")
+        response = await client.post(
+            "http://localhost:8003/v1/responses",
+            json={
+                "model": "langgraph-agent",
+                "stream": False,
+            },
+        )
+        
+        if response.status_code == 400:
+            print(f" Correctly rejected: {response.json()}")
+        else:
+            print(f" Should have failed: {response.status_code}")
 
     print()
 
@@ -215,8 +301,10 @@ async def main():
         await test_list_models()
         await test_non_streaming()
         await test_streaming()
-        await test_with_thread_id()
-        await test_with_openai_client()
+        await test_multipart_input()
+        await test_conversation_chaining()
+        await test_backward_compatibility()
+        await test_error_handling()
 
         print("=" * 50)
         print("All tests completed!")
@@ -228,4 +316,4 @@ async def main():
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    asyncio.run(main()

@@ -18,9 +18,11 @@ The AI ecosystem has a gap: while LangGraph provides powerful agent orchestratio
 ### Key Benefits
 
 - **Zero Configuration**: Works with any LangGraph CompiledGraph out of the box
-- **Full Streaming Support**: Native SSE streaming for real-time responses
+- **Full Streaming Support**: Native SSE streaming with correct OpenAI event names
+- **Conversation Chaining**: Support for `previous_response_id` to maintain context
+- **OpenAI Spec Compliant**: Uses `input` parameter and exact event structure
 - **Vercel AI SDK Compatible**: Seamless integration with modern web frameworks
-- **Type-Safe**: Built with full type hints and OpenAI's official type definitions
+- **Backward Compatible**: Still accepts `messages` for easy migration
 - **Production Ready**: Built on FastAPI with robust error handling
 
 ## Installation
@@ -63,14 +65,16 @@ Your agent is now accessible at `http://localhost:8000/v1/responses`!
 ```python
 import httpx
 
+# Using 'input' (OpenAI Responses API spec)
 response = httpx.post(
     "http://localhost:8000/v1/responses",
     json={
-        "messages": [{"role": "user", "content": "Hello!"}],
+        "model": "langgraph-agent",  # Required
+        "input": "Hello!",
         "stream": False
     }
 )
-print(response.json())
+print(response.json()["output"][0]["content"][0]["text"])
 ```
 
 ### Streaming with SSE
@@ -80,13 +84,44 @@ import httpx
 import json
 
 with httpx.stream("POST", "http://localhost:8000/v1/responses",
-                  json={"messages": [{"role": "user", "content": "Tell me a story"}], 
-                        "stream": True}) as r:
+                  json={
+                      "model": "langgraph-agent",
+                      "input": "Tell me a story",
+                      "stream": True
+                  }) as r:
     for line in r.iter_lines():
         if line.startswith("data: "):
             event = json.loads(line[6:])
-            if event["type"] == "response.text.delta":
+            if event["type"] == "response.output_text.delta":
                 print(event["delta"], end="", flush=True)
+```
+
+### Conversation Chaining
+
+```python
+# First message
+response1 = httpx.post(
+    "http://localhost:8000/v1/responses",
+    json={
+        "model": "langgraph-agent",
+        "input": "My name is Alice",
+        "store": True,  # Store for chaining
+        "stream": False
+    }
+)
+response_id = response1.json()["id"]
+
+# Chained follow-up
+response2 = httpx.post(
+    "http://localhost:8000/v1/responses",
+    json={
+        "model": "langgraph-agent",
+        "input": "What's my name?",
+        "previous_response_id": response_id,
+        "stream": False
+    }
+)
+# Will remember context from previous message
 ```
 
 ### With Vercel AI SDK
@@ -98,7 +133,7 @@ import { streamText } from 'ai'
 const result = await streamText({
   model: openai('langgraph-agent'),
   baseURL: 'http://localhost:8000/v1',
-  messages: [{ role: 'user', content: 'Hello!' }],
+  prompt: 'Hello!',  // Vercel AI SDK uses prompt
 })
 
 for await (const chunk of result.textStream) {
@@ -121,10 +156,15 @@ gateway = ResponsesGateway(
 
 # Access additional request data
 class CustomGateway(ResponsesGateway):
-    def _prepare_graph_input(self, user_message: str, req):
+    def _prepare_graph_input(self, user_input: str, req, previous_context=None):
+        messages = []
+        if previous_context:  # Continue conversation
+            messages.extend(previous_context["messages"])
+        messages.append({"role": "user", "content": user_input})
+        
         return {
-            "messages": [{"role": "user", "content": user_message}],
-            "thread_id": req.thread_id,  # Conversation threading
+            "messages": messages,
+            "thread_id": req.thread_id,  # Thread management
             "user_id": req.user_id,      # User isolation
             "metadata": req.metadata,     # Custom metadata
         }
@@ -140,11 +180,24 @@ Create a response from the agent. Supports both streaming and non-streaming mode
 **Request Body:**
 ```json
 {
+  "model": "langgraph-agent",              // Required
+  "input": "Your message",                // Or array of input parts
+  "stream": true,                         // Enable SSE streaming
+  "previous_response_id": "resp_xxx",     // Chain conversations
+  "store": true,                          // Store for chaining
+  "thread_id": "optional-thread-id",      // Thread management
+  "user_id": "optional-user-id",          // User isolation
+  "metadata": {}                          // Custom data
+}
+```
+
+**Backward Compatibility:**
+The gateway still accepts `messages` array for easy migration:
+```json
+{
+  "model": "langgraph-agent",
   "messages": [{"role": "user", "content": "Your message"}],
-  "stream": true,
-  "thread_id": "optional-thread-id",
-  "user_id": "optional-user-id",
-  "metadata": {}
+  "stream": false
 }
 ```
 
@@ -171,15 +224,16 @@ class MyGateway(ResponsesGateway):
 
 ### Custom Input Preparation
 
-Customize how user messages are prepared for your graph:
+Customize how user input is prepared for your graph:
 
 ```python
 class MyGateway(ResponsesGateway):
-    def _prepare_graph_input(self, user_message: str, req):
+    def _prepare_graph_input(self, user_input: str, req, previous_context=None):
         return {
-            "query": user_message,
+            "query": user_input,
+            "history": previous_context.get("messages", []) if previous_context else [],
             "context": req.metadata.get("context", {}),
-            "config": {"temperature": 0.7}
+            "config": {"temperature": req.temperature or 0.7}
         }
 ```
 
