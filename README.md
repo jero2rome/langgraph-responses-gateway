@@ -1,5 +1,10 @@
 # LangGraph Responses Gateway
 
+[![GitHub](https://img.shields.io/github/license/jero2rome/langgraph-responses-gateway)](https://github.com/jero2rome/langgraph-responses-gateway/blob/main/LICENSE)
+[![GitHub Stars](https://img.shields.io/github/stars/jero2rome/langgraph-responses-gateway)](https://github.com/jero2rome/langgraph-responses-gateway)
+[![GitHub Issues](https://img.shields.io/github/issues/jero2rome/langgraph-responses-gateway)](https://github.com/jero2rome/langgraph-responses-gateway/issues)
+[![GitHub Actions](https://github.com/jero2rome/langgraph-responses-gateway/actions/workflows/test.yml/badge.svg)](https://github.com/jero2rome/langgraph-responses-gateway/actions)
+
 Bridge any LangGraph agent to OpenAI's Responses API format with zero configuration.
 
 ## Overview
