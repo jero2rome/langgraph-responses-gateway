@@ -41,7 +41,7 @@ jobs:
     
     - name: Test imports
       run: |
-        python -c "from langgraph_responses_gateway import ResponsesGateway"
+        python -c "from langgraph_responses_gateway import ResponsesGatewayService"
         python -c "from langgraph_responses_gateway import __version__"
     
     - name: Run example (dry run)

@@ -7,6 +7,8 @@ Author: Jerome Mohanan
 License: MIT
 """
 
+from typing import Any
+
 from .service import ResponsesGatewayService, ResponsesRequest
 from .version import __version__
 
@@ -18,7 +20,7 @@ __all__ = [
 
 
 # Lazy loading for optional web framework integrations
-def __getattr__(name: str):
+def __getattr__(name: str) -> Any:
     """Lazy import for optional dependencies."""
     if name == "integrations":
         try:

@@ -8,7 +8,7 @@ import json
 import time
 import uuid
 from collections.abc import AsyncIterator
-from typing import Any, Dict, Optional, Protocol, Union
+from typing import Any, Optional, Protocol, Union
 
 from pydantic import BaseModel, Field
 
@@ -17,17 +17,17 @@ class LangGraphProtocol(Protocol):
     """Protocol for LangGraph compatibility."""
 
     async def ainvoke(
-        self, input_data: Dict[str, Any], config: Optional[Dict[str, Any]] = None
-    ) -> Dict[str, Any]:
+        self, input_data: dict[str, Any], config: Optional[dict[str, Any]] = None
+    ) -> dict[str, Any]:
         """Invoke the graph asynchronously."""
         ...
 
     def astream(
         self,
-        input_data: Dict[str, Any],
-        config: Optional[Dict[str, Any]] = None,
+        input_data: dict[str, Any],
+        config: Optional[dict[str, Any]] = None,
         stream_mode: str = "updates",
-    ) -> AsyncIterator[Dict[str, Any]]:
+    ) -> AsyncIterator[dict[str, Any]]:
         """Stream the graph execution asynchronously."""
         ...
 
@@ -37,7 +37,7 @@ class ResponsesRequest(BaseModel):
 
     # Required parameters
     model: Optional[str] = None
-    input: Optional[Union[str, list[dict]]] = None
+    input: Optional[Union[str, list[dict[str, Any]]]] = None
 
     # Optional parameters
     stream: bool = False
@@ -57,14 +57,14 @@ class ResponsesRequest(BaseModel):
     include: Optional[list[str]] = None
 
     # Tools (not fully implemented yet)
-    tools: Optional[list] = None
-    tool_choice: Optional[Union[str, dict]] = None
+    tools: Optional[list[dict[str, Any]]] = None
+    tool_choice: Optional[Union[str, dict[str, Any]]] = None
     parallel_tool_calls: Optional[bool] = None
 
     # LangGraph context
     thread_id: Optional[str] = None
     user_id: Optional[str] = None
-    metadata: Optional[dict] = None
+    metadata: Optional[dict[str, Any]] = None
 
 
 class ResponsesGatewayService:
@@ -97,9 +97,9 @@ class ResponsesGatewayService:
         self.name = name
         self.version = version
         # Store for conversation chaining (simple in-memory for MVP)
-        self._response_store = {}
+        self._response_store: dict[str, dict[str, Any]] = {}
 
-    async def process_request(self, request: ResponsesRequest) -> dict:
+    async def process_request(self, request: ResponsesRequest) -> dict[str, Any]:
         """
         Process a request and return the response.
 
@@ -250,7 +250,7 @@ class ResponsesGatewayService:
                 messages_input, config=config, stream_mode="updates"
             ):
                 # Extract token usage from messages
-                for key, value in step.items():
+                for _, value in step.items():
                     if isinstance(value, dict) and "messages" in value:
                         for msg in value["messages"]:
                             if (
@@ -367,10 +367,10 @@ class ResponsesGatewayService:
         self,
         user_input: str,
         req: ResponsesRequest,
-        previous_context: Optional[dict] = None,
-    ) -> dict:
+        previous_context: Optional[dict[str, Any]] = None,
+    ) -> dict[str, Any]:
         """Prepare input for LangGraph."""
-        messages = []
+        messages: list[dict[str, Any]] = []
 
         # Add system instructions if provided
         if req.instructions:
@@ -386,13 +386,15 @@ class ResponsesGatewayService:
         messages.append({"role": "user", "content": user_input})
 
         # Prepare config
-        config = {"messages": messages}
+        config: dict[str, Any] = {"messages": messages}
 
         # Add thread management
         if req.thread_id or req.user_id or req.user:
             effective_user = req.user or req.user_id
-            config["thread_id"] = req.thread_id
-            config["user_id"] = effective_user
+            if req.thread_id:
+                config["thread_id"] = req.thread_id
+            if effective_user:
+                config["user_id"] = effective_user
 
         # Add metadata
         if req.metadata:
@@ -409,10 +411,10 @@ class ResponsesGatewayService:
         return config
 
     def _prepare_langgraph_config(
-        self, graph_input: dict, req: ResponsesRequest
-    ) -> dict:
+        self, graph_input: dict[str, Any], req: ResponsesRequest
+    ) -> dict[str, Any]:
         """Prepare LangGraph configuration."""
-        config = {}
+        config: dict[str, Any] = {}
 
         # Handle thread management
         if req.thread_id or req.user_id or req.user:
@@ -433,19 +435,19 @@ class ResponsesGatewayService:
     def _extract_content_from_step(self, step: Any) -> str:
         """Extract content from a LangGraph streaming step."""
         if isinstance(step, dict):
-            for key, value in step.items():
+            for _, value in step.items():
                 if isinstance(value, dict):
                     if "messages" in value and value["messages"]:
                         msg = value["messages"][-1]
                         if hasattr(msg, "content"):
-                            return msg.content
+                            return str(msg.content)
                         elif isinstance(msg, dict) and "content" in msg:
-                            return msg["content"]
+                            return str(msg["content"])
 
             if "content" in step:
-                return step["content"]
+                return str(step["content"])
             if "output" in step:
-                return step["output"]
+                return str(step["output"])
 
         return ""
 
@@ -455,9 +457,9 @@ class ResponsesGatewayService:
             if "messages" in result and result["messages"]:
                 msg = result["messages"][-1]
                 if hasattr(msg, "content"):
-                    return msg.content
+                    return str(msg.content)
                 elif isinstance(msg, dict) and "content" in msg:
-                    return msg["content"]
+                    return str(msg["content"])
 
             if "output" in result:
                 return str(result["output"])
@@ -466,7 +468,7 @@ class ResponsesGatewayService:
 
         return str(result)
 
-    def _extract_token_usage(self, result: Any) -> dict:
+    def _extract_token_usage(self, result: Any) -> dict[str, Any]:
         """Extract token usage from LangGraph result."""
         total_tokens = {"prompt": 0, "completion": 0, "total": 0}
 
@@ -481,7 +483,9 @@ class ResponsesGatewayService:
 
         return total_tokens
 
-    def _estimate_token_usage(self, graph_input: dict, content: str) -> dict:
+    def _estimate_token_usage(
+        self, graph_input: dict[str, Any], content: str
+    ) -> dict[str, Any]:
         """Estimate token usage if not provided by LangGraph."""
         # Simple estimation - 1 token per 4 characters
         prompt_tokens = max(1, len(str(graph_input)) // 4)
@@ -493,11 +497,13 @@ class ResponsesGatewayService:
             "total": prompt_tokens + completion_tokens,
         }
 
-    def _format_sse(self, event: dict) -> str:
+    def _format_sse(self, event: dict[str, Any]) -> str:
         """Format an event as Server-Sent Event."""
         return f"data: {json.dumps(event)}\n\n"
 
-    def _store_response(self, response_id: str, input_data: dict, output: str):
+    def _store_response(
+        self, response_id: str, input_data: dict[str, Any], output: str
+    ) -> None:
         """Store response for conversation chaining."""
         messages = list(input_data.get("messages", []))
         messages.append({"role": "assistant", "content": output})

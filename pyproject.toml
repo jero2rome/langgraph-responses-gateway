@@ -1,6 +1,6 @@
 [project]
 name = "langgraph-responses-gateway"
-version = "2.0.1"
+version = "2.0.2"
 description = "Expose any LangGraph agent as an OpenAI Responses API endpoint"
 readme = "README.md"
 license = "MIT"

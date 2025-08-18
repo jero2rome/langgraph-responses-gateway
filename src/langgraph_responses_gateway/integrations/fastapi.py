@@ -6,6 +6,7 @@ following modern best practices where the user maintains control of their app.
 
 import json
 import uuid
+from collections.abc import AsyncIterator
 from typing import Any, Callable, Optional
 
 from fastapi import APIRouter, HTTPException, Request
@@ -78,7 +79,7 @@ def create_responses_router(
     router = APIRouter()
 
     @router.post("/responses")
-    async def responses_endpoint(request: Request):
+    async def responses_endpoint(request: Request) -> Any:
         """OpenAI Responses API endpoint."""
 
         # Optional auth check
@@ -89,7 +90,7 @@ def create_responses_router(
         try:
             body = await request.json()
         except Exception as e:
-            raise HTTPException(400, f"Invalid JSON: {str(e)}")
+            raise HTTPException(400, f"Invalid JSON: {str(e)}") from e
 
         # Auto-inject model if not provided
         if "model" not in body:
@@ -108,12 +109,12 @@ def create_responses_router(
         try:
             req = ResponsesRequest(**body)
         except Exception as e:
-            raise HTTPException(400, f"Invalid request: {str(e)}")
+            raise HTTPException(400, f"Invalid request: {str(e)}") from e
 
         # Process request
         if req.stream:
             # Streaming response
-            async def stream_with_model_masking():
+            async def stream_with_model_masking() -> AsyncIterator[str]:
                 async for event in service.stream_response(req):
                     # Mask internal model name in SSE events
                     yield _mask_model_in_sse(event, public_model_name)
@@ -135,7 +136,7 @@ def create_responses_router(
                 result["model"] = public_model_name
                 return JSONResponse(result)
             except ValueError as e:
-                raise HTTPException(400, str(e))
+                raise HTTPException(400, str(e)) from e
             except Exception as e:
                 return JSONResponse(
                     status_code=500,
@@ -148,7 +149,7 @@ def create_responses_router(
                 )
 
     @router.get("/models")
-    async def list_models():
+    async def list_models() -> dict[str, Any]:
         """List available models."""
         return {
             "object": "list",
@@ -181,7 +182,7 @@ def _mask_model_in_sse(event: str, public_model_name: str) -> str:
 
         # Re-serialize
         return f"data: {json.dumps(data)}\n\n"
-    except:
+    except Exception:
         # If parsing fails, return as-is
         return event
 
