@@ -7,14 +7,27 @@ Author: Jerome Mohanan
 License: MIT
 """
 
-# Export integrations for framework-specific conveniences
-from . import integrations
 from .service import ResponsesGatewayService, ResponsesRequest
 from .version import __version__
 
 __all__ = [
     "ResponsesGatewayService",
     "ResponsesRequest",
-    "integrations",
     "__version__",
 ]
+
+
+# Lazy loading for optional web framework integrations
+def __getattr__(name: str):
+    """Lazy import for optional dependencies."""
+    if name == "integrations":
+        try:
+            from . import integrations
+
+            return integrations
+        except ImportError as e:
+            raise ImportError(
+                "Web framework integrations require optional dependencies. "
+                "Install with: pip install langgraph-responses-gateway[web]"
+            ) from e
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

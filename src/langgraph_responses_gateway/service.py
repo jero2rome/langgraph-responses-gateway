@@ -8,7 +8,7 @@ import json
 import time
 import uuid
 from collections.abc import AsyncIterator
-from typing import Any, Optional, Protocol, Union
+from typing import Any, Dict, Optional, Protocol, Union
 
 from pydantic import BaseModel, Field
 
@@ -16,16 +16,18 @@ from pydantic import BaseModel, Field
 class LangGraphProtocol(Protocol):
     """Protocol for LangGraph compatibility."""
 
-    async def ainvoke(self, input_data: dict, config: Optional[dict] = None) -> dict:
+    async def ainvoke(
+        self, input_data: Dict[str, Any], config: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
         """Invoke the graph asynchronously."""
         ...
 
-    async def astream(
+    def astream(
         self,
-        input_data: dict,
-        config: Optional[dict] = None,
+        input_data: Dict[str, Any],
+        config: Optional[Dict[str, Any]] = None,
         stream_mode: str = "updates",
-    ) -> AsyncIterator[dict]:
+    ) -> AsyncIterator[Dict[str, Any]]:
         """Stream the graph execution asynchronously."""
         ...
 
