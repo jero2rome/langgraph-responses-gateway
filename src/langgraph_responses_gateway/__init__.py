@@ -1,14 +1,20 @@
-"""LangGraph Responses Gateway - Bridge LangGraph agents to OpenAI Responses API.
+"""LangGraph Responses Gateway - Pure service library for OpenAI Responses API.
 
-This package provides a simple gateway to expose any LangGraph agent or multi-agent
-system as an OpenAI Responses API endpoint, making it compatible with modern AI
-clients like Vercel AI SDK.
+This package provides a framework-agnostic service for exposing LangGraph agents
+through the OpenAI Responses API format, without any web framework dependencies.
 
 Author: Jerome Mohanan
 License: MIT
 """
 
-from .gateway import ResponsesGateway
+# Export integrations for framework-specific conveniences
+from . import integrations
+from .service import ResponsesGatewayService, ResponsesRequest
 from .version import __version__
 
-__all__ = ["ResponsesGateway", "__version__"]
+__all__ = [
+    "ResponsesGatewayService",
+    "ResponsesRequest",
+    "integrations",
+    "__version__",
+]

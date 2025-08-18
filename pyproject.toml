@@ -1,6 +1,6 @@
 [project]
 name = "langgraph-responses-gateway"
-version = "0.2.0"
+version = "1.0.0"
 description = "Expose any LangGraph agent as an OpenAI Responses API endpoint"
 readme = "README.md"
 license = "MIT"
@@ -23,16 +23,24 @@ classifiers = [
 ]
 requires-python = ">=3.9"
 dependencies = [
-    "fastapi>=0.100.0",
-    "uvicorn>=0.23.0",
-    "langgraph>=0.5.0",
-    "openai>=1.75.0",
     "pydantic>=2.0.0",
-    "httpx>=0.24.0",
+    "langgraph>=0.5.0",
     "typing-extensions>=4.0.0",
 ]
 
 [project.optional-dependencies]
+# Web framework dependencies for backward compatibility
+web = [
+    "fastapi>=0.100.0",
+    "uvicorn>=0.23.0",
+    "httpx>=0.24.0",
+]
+# For examples that use the web framework
+examples = [
+    "fastapi>=0.100.0",
+    "uvicorn>=0.23.0",
+    "openai>=1.75.0",
+]
 dev = [
     "pytest>=7.0.0",
     "pytest-asyncio>=0.21.0",
